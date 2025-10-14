@@ -157,6 +157,17 @@ if 'data_original' in locals():
                 skew_reco = "Sqrt or log strongly recommended."
             st.write(f"Skewness recommendation: {skew_reco}")
 
+            if orig_kurt < -1:
+                kurt_reco = "Low kurtosis: distribution is flat with light tails."
+                st.write("- Low kurtosis: distribution is flat with light tails (platykurtic).")
+            elif -1 <= orig_kurt <= 1:
+                kurt_reco = "Moderate kurtosis: distribution close to normal."
+                st.write("- Moderate kurtosis: distribution close to normal (mesokurtic).")
+            else:
+                kurt_reco = "High kurtosis: distribution has heavy tails, watch for outliers."
+                st.write("- High kurtosis: distribution has heavy tails (leptokurtic), watch for outliers.")
+            st.write(f"Kurtosis recommendation: {kurt_reco}")
+
             treatment = st.radio(f"Outlier treatment for {col}", ("None", "Remove outliers", "Clip outliers"), key=f"outlier_{col}")
             if treatment == "Remove outliers":
                 Q1 = np.percentile(col_data, 25)
@@ -221,7 +232,6 @@ if 'data_original' in locals():
         else:
             st.info("Not enough numeric columns to show correlation matrix.")
 
-        # New: Train-Test Split option
         split_ratio = st.slider("Train-Test Split Ratio (Train %)", 0.1, 0.9, 0.8, 0.05)
         train_df, test_df = train_test_split(data, train_size=split_ratio, random_state=42)
 
@@ -229,8 +239,7 @@ if 'data_original' in locals():
         y_train = train_df[target].values
         X_test_raw = test_df[features].values
         y_test = test_df[target].values
-
-        # Feature scaling method selection with default "Standardization (Z-score)"
+ 
         st.header("Feature Scaling Options")
         scaling_method = st.selectbox(
             "Choose a feature scaling method:",
