@@ -66,9 +66,8 @@ if uploaded_file is not None:
     else:
         st.write(f"Selected target variable: {target}, Data_type: {type(target)} (should be <str>)")
         st.write(f"Selected {len(features)} feature columns: {features}, Data_type: {type(features)} (should be <list>)")
+        st.write("----------------------------UNIVARIATE ANALYSIS TYPICAL FOR LINEAR REGRESSION-------------------------------------")
         st.write("[Checking skewness and kurtosis of features]")
-
-    st.write("----------------------------UNIVARIATE ANALYSIS TYPICAL FOR LINEAR REGRESSION-------------------------------------")
 
         def recommendations_skew_kurt(col, skew_val, kurt_val):
             st.write(f"Feature: {col}")
