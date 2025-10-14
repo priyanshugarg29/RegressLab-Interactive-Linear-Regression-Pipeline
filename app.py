@@ -181,28 +181,20 @@ if 'data_original' in locals():
         )
 
         if reg_type == "Elastic Net":
-            alpha = st.number_input("Alpha (Regularization strength)", min_value=0.0, value=0.1, step=0.01)
+            alpha = st.number_input("Alpha (Regularization strength)", min_value=0.0, value=0.1, step=0.01, format="%.10f")
         else:
             alpha = 0.0
 
-        learning_rate = st.number_input("Learning rate", min_value=0.0001, value=0.01, step=0.001)
-        iterations = st.number_input("Number of iterations", min_value=10, value=50, step=10)
+        learning_rate = st.number_input("Learning rate", min_value=1e-10, value=0.01, step=1e-4, format="%f")
+        max_iterations = st.number_input("Maximum iterations", min_value=10, value=1000, step=10)
+        convergence_threshold = st.number_input("Convergence threshold (change in cost)", min_value=1e-12, max_value=1.0, value=1e-6, format="%.10f")
 
-        # Prepare data matrix X and target vector y for gradient descent
         X = np.column_stack((np.ones(data.shape[0]), data[features].values))
         y = data[target].values
 
         theta = np.zeros(X.shape[1])
 
-        st.write(f"Starting manual gradient descent for {iterations} iterations with {reg_type} regularization...")
-        if reg_type == "None":
-            st.write("No regularization will be applied.")
-        elif reg_type == "L1 (Lasso)":
-            st.write("L1 regularization will be applied, promoting sparsity in coefficients.")
-        elif reg_type == "L2 (Ridge)":
-            st.write("L2 regularization will be applied, shrinking coefficients towards zero.")
-        else:
-            st.write(f"Elastic Net regularization with alpha={alpha} and mixing parameter 0.5 will be applied.")
+        st.write(f"Starting manual gradient descent for up to {max_iterations} iterations with {reg_type} regularization...")
 
         def compute_cost(X, y, theta, reg_type, alpha):
             m = len(y)
@@ -246,14 +238,36 @@ if 'data_original' in locals():
             theta_new = theta - learning_rate * grad
             return theta_new, grad
 
-        for i in range(1, int(iterations)+1):
+        previous_cost = float('inf')
+        for i in range(1, int(max_iterations)+1):
             cost = compute_cost(X, y, theta, reg_type, alpha)
-            st.write(f"Iteration {i}: Cost = {cost:.6f}")
-            st.write(f"Current parameters: {theta}")
-            theta, grad = gradient_descent_step(X, y, theta, learning_rate, reg_type, alpha)
-            st.write(f"Gradient: {grad}")
-            st.write(f"Updated parameters: {theta}")
-            st.write("We update parameters in the direction opposite to the gradient to minimize the cost function.\n")
+            st.write(f"--- Iteration {i} ---")
+            st.write(f"Current cost (loss): {cost:.10f}")
 
-        st.write("Gradient descent complete.")
-        st.write(f"Final parameters: {theta}")
+            param_desc = [f"Intercept (bias): {theta[0]:.6f}"]
+            param_desc += [f"Weight of feature '{feat}': {theta[j+1]:.6f}" for j, feat in enumerate(features)]
+            st.write("Parameters:")
+            for desc in param_desc:
+                st.write(f"- {desc}")
+
+            theta, grad = gradient_descent_step(X, y, theta, learning_rate, reg_type, alpha)
+
+            grad_desc = [f"Gradient for Intercept (bias): {grad[0]:.6f}"]
+            grad_desc += [f"Gradient for feature '{feat}': {grad[j+1]:.6f}" for j, feat in enumerate(features)]
+            st.write("Gradient:")
+            for desc in grad_desc:
+                st.write(f"- {desc}")
+
+            st.write("Parameters updated by moving opposite the gradient to minimize the cost.\n")
+
+            cost_change = abs(previous_cost - cost)
+            if cost_change < convergence_threshold:
+                st.write(f"Convergence achieved: cost change {cost_change:.12f} < threshold {convergence_threshold}")
+                st.write(f"Stopping gradient descent at iteration {i}.")
+                break
+            previous_cost = cost
+
+        st.success("Gradient descent complete.")
+        st.write("Final learned parameters:")
+        for desc in param_desc:
+            st.write(f"- {desc}")
