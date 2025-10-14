@@ -2,7 +2,7 @@ RegressLab: Interactive Linear Regression Pipeline
 
 RegressLab is an interactive Streamlit web application designed to guide students, researchers, and practitioners through the end-to-end process of building and analyzing a linear regression model from tabular data.
 
-Deployed Dashboard URL: https://regresslab-interactive-linear-regression-pipeline.streamlit.app/
+Deployed Dashboard URL: https://regresslabinteractivelinearregressionpipeline.streamlit.app/
 
 Features
 
