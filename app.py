@@ -4,6 +4,7 @@ import numpy as np
 from scipy.stats import skew, kurtosis, probplot
 import matplotlib.pyplot as plt
 import io
+import seaborn as sns
 
 st.title("RegressLab: Interactive Linear Regression Pipeline")
 
@@ -161,6 +162,23 @@ if uploaded_file is not None:
 
         st.header("Target Variable Analysis")
         analyze_column(target)
+
+        st.header("Correlation Matrix of Numeric Columns")
+        numeric_cols = data.select_dtypes(include=[np.number]).columns
+        corr_fig_buf = None
+
+        if len(numeric_cols) > 1:
+            corr = data[numeric_cols].corr()
+            fig, ax = plt.subplots(figsize=(10, 8))
+            sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm", square=True, ax=ax)
+            ax.set_title("Correlation Matrix")
+            st.pyplot(fig)
+            corr_fig_buf = io.BytesIO()
+            fig.savefig(corr_fig_buf, format="png")
+            corr_fig_buf.seek(0)
+            plt.close(fig)
+        else:
+            st.info("Not enough numeric columns to show correlation matrix.")
 
         st.header("Summary")
         st.write("Final feature and target statistics and plots are ready to be passed for linear regression suitability analysis.")
