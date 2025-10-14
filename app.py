@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 import plotly.graph_objs as go
+from sklearn.model_selection import train_test_split
 
 st.title("RegressLab: Interactive Linear Regression Pipeline")
 
@@ -39,6 +40,24 @@ def manual_robust_scaler(X):
     q3 = np.percentile(X, 75, axis=0)
     iqr = q3 - q1
     return (X - median) / iqr, median, iqr
+
+def evaluate_regression(y_true, y_pred):
+    n = len(y_true)
+    residuals = y_true - y_pred
+    ss_res = np.sum(residuals ** 2)
+    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+    mse = ss_res / n
+    rmse = np.sqrt(mse)
+    mae = np.mean(np.abs(residuals))
+    r2 = 1 - ss_res / ss_tot if ss_tot != 0 else 0.0
+    mape = np.mean(np.abs(residuals / y_true)) * 100 if np.all(y_true != 0) else np.nan
+    return {
+        'MSE': mse,
+        'RMSE': rmse,
+        'MAE': mae,
+        'R2': r2,
+        'MAPE (%)': mape
+    }
 
 if 'data_original' in locals():
     data = data_original.copy()
@@ -191,7 +210,16 @@ if 'data_original' in locals():
         else:
             st.info("Not enough numeric columns to show correlation matrix.")
 
-        # Feature Scaling drop-down with default to Standardization
+        # New: Train-Test Split option
+        split_ratio = st.slider("Train-Test Split Ratio (Train %)", 0.1, 0.9, 0.8, 0.05)
+        train_df, test_df = train_test_split(data, train_size=split_ratio, random_state=42)
+
+        X_train_raw = train_df[features].values
+        y_train = train_df[target].values
+        X_test_raw = test_df[features].values
+        y_test = test_df[target].values
+
+        # Feature scaling method selection with default "Standardization (Z-score)"
         st.header("Feature Scaling Options")
         scaling_method = st.selectbox(
             "Choose a feature scaling method:",
@@ -199,48 +227,30 @@ if 'data_original' in locals():
             index=1
         )
 
-        X_raw = data[features].values
-
         if scaling_method == "None":
-            st.write("""
-            **Pros:** No change to original data; preserves interpretability.  
-            **Cons:** Can cause slow or unstable convergence with gradient descent; regularization may be biased if features scale differently.
-            """)
-            X_scaled = X_raw
-
+            X_train_scaled = X_train_raw
+            X_test_scaled = X_test_raw
         elif scaling_method == "Standardization (Z-score)":
-            st.write("""
-            **Pros:** Centers data around zero with unit variance; improves gradient descent convergence.  
-            **Cons:** Sensitive to outliers; assumes Gaussian-like distributions.
-            """)
-            mean = np.mean(X_raw, axis=0)
-            std = np.std(X_raw, axis=0)
-            X_scaled = (X_raw - mean) / std
-
+            mean = np.mean(X_train_raw, axis=0)
+            std = np.std(X_train_raw, axis=0)
+            X_train_scaled = (X_train_raw - mean) / std
+            X_test_scaled = (X_test_raw - mean) / std
         elif scaling_method == "Min-Max Scaling":
-            st.write("""
-            **Pros:** Scales features to [0,1]; useful when fixed range is important.  
-            **Cons:** Sensitive to outliers; may distort feature distributions.
-            """)
-            min_ = np.min(X_raw, axis=0)
-            max_ = np.max(X_raw, axis=0)
-            X_scaled = (X_raw - min_) / (max_ - min_)
-
-        else:  # Robust Scaling
-            st.write("""
-            **Pros:** Uses median and IQR; robust to outliers.  
-            **Cons:** Data not always centered; sometimes less efficient for well-behaved data.
-            """)
-            median = np.median(X_raw, axis=0)
-            q1 = np.percentile(X_raw, 25, axis=0)
-            q3 = np.percentile(X_raw, 75, axis=0)
+            min_ = np.min(X_train_raw, axis=0)
+            max_ = np.max(X_train_raw, axis=0)
+            X_train_scaled = (X_train_raw - min_) / (max_ - min_)
+            X_test_scaled = (X_test_raw - min_) / (max_ - min_)
+        else:
+            median = np.median(X_train_raw, axis=0)
+            q1 = np.percentile(X_train_raw, 25, axis=0)
+            q3 = np.percentile(X_train_raw, 75, axis=0)
             iqr = q3 - q1
-            X_scaled = (X_raw - median) / iqr
+            X_train_scaled = (X_train_raw - median) / iqr
+            X_test_scaled = (X_test_raw - median) / iqr
 
-        X = np.column_stack((np.ones(len(data)), X_scaled))
-        y = data[target].values
+        X_train = np.column_stack((np.ones(len(train_df)), X_train_scaled))
+        X_test = np.column_stack((np.ones(len(test_df)), X_test_scaled))
 
-        # Regularization dropdown defaulting to None
         st.header("Manual Gradient Descent for Linear Regression")
         reg_type = st.selectbox(
             "Choose regularization:",
@@ -263,7 +273,7 @@ if 'data_original' in locals():
 
         max_iterations = st.number_input("Maximum iterations", min_value=10, value=1000, step=10)
 
-        theta = np.zeros(X.shape[1])
+        theta = np.zeros(X_train.shape[1])
 
         st.write(f"Starting manual gradient descent for up to {max_iterations} iterations with {reg_type} regularization...")
 
@@ -279,7 +289,7 @@ if 'data_original' in locals():
                 reg_term = alpha * np.sum(np.abs(theta[1:])) / m
             elif reg_type == "L2 (Ridge)":
                 reg_term = (alpha/(2*m)) * np.sum(theta[1:] ** 2)
-            else:  # Elastic Net
+            else:
                 l1_ratio = 0.5
                 l1 = np.sum(np.abs(theta[1:]))
                 l2 = np.sum(theta[1:] ** 2)
@@ -298,7 +308,7 @@ if 'data_original' in locals():
                 reg_grad = np.concatenate(([0], alpha * np.sign(theta[1:]) / m))
             elif reg_type == "L2 (Ridge)":
                 reg_grad = np.concatenate(([0], (alpha/m) * theta[1:]))
-            else:  # Elastic Net
+            else:
                 l1_ratio = 0.5
                 l1_grad = np.sign(theta[1:])
                 l2_grad = theta[1:]
@@ -311,30 +321,29 @@ if 'data_original' in locals():
 
         previous_cost = float('inf')
         for i in range(1, int(max_iterations)+1):
-            cost = compute_cost(X, y, theta, reg_type, alpha)
-            
-            # Print only every 10th iteration or last iteration
+            cost = compute_cost(X_train, y_train, theta, reg_type, alpha)
+
             if i % 10 == 0 or i == int(max_iterations):
                 st.write(f"--- Iteration {i} ---")
-                st.write(f"Current cost (loss): {cost:.12f}")
+                st.write(f"Training cost (loss): {cost:.12f}")
 
                 param_desc = [f"Intercept (bias): {theta[0]:.6f}"]
-                param_desc += [f"Weight of feature '{feat}': {theta[j+1]:.6f}" for j, feat in enumerate(features)]
+                param_desc += [f"Weight '{feat}': {theta[j+1]:.6f}" for j, feat in enumerate(features)]
                 st.write("Parameters:")
                 for desc in param_desc:
                     st.write(f"- {desc}")
 
-                theta, grad = gradient_descent_step(X, y, theta, learning_rate, reg_type, alpha)
+                theta, grad = gradient_descent_step(X_train, y_train, theta, learning_rate, reg_type, alpha)
 
                 grad_desc = [f"Gradient for Intercept (bias): {grad[0]:.6f}"]
-                grad_desc += [f"Gradient for feature '{feat}': {grad[j+1]:.6f}" for j, feat in enumerate(features)]
+                grad_desc += [f"Gradient for '{feat}': {grad[j+1]:.6f}" for j, feat in enumerate(features)]
                 st.write("Gradient:")
                 for desc in grad_desc:
                     st.write(f"- {desc}")
 
                 st.write("Parameters updated by moving opposite the gradient to minimize the cost.\n")
             else:
-                theta, grad = gradient_descent_step(X, y, theta, learning_rate, reg_type, alpha)
+                theta, grad = gradient_descent_step(X_train, y_train, theta, learning_rate, reg_type, alpha)
 
             cost_change = abs(previous_cost - cost)
             if cost_change < convergence_threshold:
@@ -344,15 +353,27 @@ if 'data_original' in locals():
             previous_cost = cost
 
         st.success("Gradient descent complete.")
-        st.write("Final learned parameters:")
-        param_desc = [f"Intercept (bias): {theta[0]:.6f}"] + [f"Weight of feature '{feat}': {theta[j+1]:.6f}" for j, feat in enumerate(features)]
-        for desc in param_desc:
-            st.write(f"- {desc}")
+        
+        train_preds = X_train.dot(theta)
+        test_preds = X_test.dot(theta)
+
+        train_df['predicted_target'] = train_preds
+        test_df['predicted_target'] = test_preds
+
+        st.header("Training Set Evaluation Metrics")
+        train_metrics = evaluate_regression(y_train, train_preds)
+        for metric, value in train_metrics.items():
+            st.write(f"{metric}: {value:.6f}")
+
+        st.header("Test Set Evaluation Metrics")
+        test_metrics = evaluate_regression(y_test, test_preds)
+        for metric, value in test_metrics.items():
+            st.write(f"{metric}: {value:.6f}" if not np.isnan(value) else f"{metric}: Undefined (zero values in target)")
 
         st.write("------")
+        
+        st.header("3D Visualization of Regression Plane and Data Points (Training Data)")
 
-        # 3D Visualization with selectable feature pair
-        st.header("3D Visualization of Regression Plane and Data Points")
         if len(features) < 2:
             st.info("Select at least two features for 3D visualization.")
         else:
@@ -363,59 +384,23 @@ if 'data_original' in locals():
             f1_idx = features.index(feature_pair_1)
             f2_idx = features.index(feature_pair_2)
 
-            # Fix other features at scaled mean 0
             fixed_features_means = {f: 0.0 for f in features}
             fixed_features_means.pop(feature_pair_1)
             fixed_features_means.pop(feature_pair_2)
 
-            # Create grid to evaluate plane
-            f1_vals = np.linspace(X_scaled[:, f1_idx].min(), X_scaled[:, f1_idx].max(), 30)
-            f2_vals = np.linspace(X_scaled[:, f2_idx].min(), X_scaled[:, f2_idx].max(), 30)
+            f1_vals = np.linspace(X_train_scaled[:, f1_idx].min(), X_train_scaled[:, f1_idx].max(), 30)
+            f2_vals = np.linspace(X_train_scaled[:, f2_idx].min(), X_train_scaled[:, f2_idx].max(), 30)
             xx, yy = np.meshgrid(f1_vals, f2_vals)
 
             grid_shape = xx.shape
-            X_grid = np.ones((xx.size, X.shape[1]))
-
-            # Set selected features to grid values
+            X_grid = np.ones((xx.size, X_train.shape[1]))
             X_grid[:, f1_idx + 1] = xx.ravel()
             X_grid[:, f2_idx + 1] = yy.ravel()
 
-            # Set other features fixed at mean 0 (scaled)
             for feat, val in fixed_features_means.items():
                 idx = features.index(feat) + 1
                 X_grid[:, idx] = val
 
             zz = X_grid.dot(theta).reshape(grid_shape)
 
-            scatter3d = go.Scatter3d(
-                x = X_scaled[:, f1_idx],
-                y = X_scaled[:, f2_idx],
-                z = y,
-                mode = 'markers',
-                marker=dict(size=5, color='red'),
-                name='Data Points'
-            )
-
-            surface3d = go.Surface(
-                x = xx,
-                y = yy,
-                z = zz,
-                colorscale = 'Viridis',
-                opacity=0.6,
-                name='Regression Plane'
-            )
-
-            layout = go.Layout(
-                scene = dict(
-                    xaxis_title=feature_pair_1,
-                    yaxis_title=feature_pair_2,
-                    zaxis_title=target,
-                ),
-                width=800,
-                height=600,
-                margin=dict(l=0,r=0,b=0,t=0)
-            )
-
-            fig = go.Figure(data=[scatter3d, surface3d], layout=layout)
-
-            st.plotly_chart(fig, use_container_width=True)
+            scatter3
