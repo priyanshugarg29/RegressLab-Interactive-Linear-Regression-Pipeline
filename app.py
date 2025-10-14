@@ -413,4 +413,23 @@ if 'data_original' in locals():
 
             zz = X_grid.dot(theta).reshape(grid_shape)
 
-            scatter3
+            scatter3d = go.Scatter3d(
+                x=X_train_scaled[:, f1_idx],
+                y=X_train_scaled[:, f2_idx],
+                z=y_train,
+                mode='markers',
+                marker=dict(size=5, color='red'),
+                name='Training Data Points'
+            )
+
+            surface3d = go.Surface(
+                x=xx,
+                y=yy,
+                z=zz,
+                colorscale='Viridis',
+                opacity=0.6,
+                name='Regression Plane'
+            )
+
+            fig = go.Figure(data=[scatter3d, surface3d], layout=layout)
+
