@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from scipy.stats import skew, kurtosis
+from scipy.stats import skew, kurtosis, boxcox_normmax, yeojohnson_normmax
+from scipy.special import boxcox1p, yeojohnson
 import matplotlib.pyplot as plt
 
 st.title("RegressLab: Interactive Linear Regression Pipeline")
@@ -9,95 +10,59 @@ st.title("RegressLab: Interactive Linear Regression Pipeline")
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 if uploaded_file is not None:
     data = pd.read_csv(uploaded_file)
+
+    st.header("Initial Data Preview and Quality Checks")
     st.write("First five rows of your data:")
     st.write(data.head())
 
     dup_count = data.duplicated().sum()
     if dup_count > 0:
-        st.write(f"Duplicate records found: {dup_count}")
-        if st.radio("Do you want to drop duplicate rows?", ("Yes", "No")) == "Yes":
-            data = data.drop_duplicates()
-            st.write(f"Duplicates dropped. New data shape: {data.shape}")
+        with st.expander("Duplicate Records Detected"):
+            st.write(f"Duplicate records found: {dup_count}")
+            if st.radio("Drop duplicate rows?", ("Yes", "No")) == "Yes":
+                data = data.drop_duplicates()
+                st.write(f"Duplicates dropped. New data shape: {data.shape}")
     else:
-        st.write("No duplicate records found.")
+        st.info("No duplicate records found.")
 
     missing_info = data.isnull().mean() * 100
     missing_info = missing_info[missing_info > 0]
     if not missing_info.empty:
-        st.write("Columns with missing values (percentage):")
-        st.write(missing_info)
-
-        action = st.radio("Choose how to handle missing values:", ("Drop rows with missing values", "Impute missing values", "Do nothing"))
-        if action == "Drop rows with missing values":
-            data = data.dropna()
-            st.write(f"Rows with missing values dropped. New shape: {data.shape}")
-        elif action == "Impute missing values":
-            for col in missing_info.index:
-                st.write(f"Impute missing values for column: {col}")
-                impute_method = st.selectbox(
-                    f"Choose imputation method for {col}",
-                    ("Mean", "Median", "Mode"),
-                    key=col
-                )
-                if impute_method == "Mean":
-                    value = data[col].mean()
-                elif impute_method == "Median":
-                    value = data[col].median()
-                else:
-                    value = data[col].mode().iloc[0]
-                data[col] = data[col].fillna(value)
-                st.write(f"Missing values in {col} imputed with {impute_method} ({value})")
+        with st.expander("Missing Values Info"):
+            st.write("Columns with missing values (percentage):")
+            st.write(missing_info)
+            action = st.radio("Handle missing values:", ("Drop rows", "Impute", "Do nothing"))
+            if action == "Drop rows":
+                data = data.dropna()
+                st.write(f"Rows with missing values dropped. New shape: {data.shape}")
+            elif action == "Impute":
+                for col in missing_info.index:
+                    impute_method = st.selectbox(f"Imputation method for {col}", ("Mean", "Median", "Mode"), key=f"impute_{col}")
+                    if impute_method == "Mean":
+                        val = data[col].mean()
+                    elif impute_method == "Median":
+                        val = data[col].median()
+                    else:
+                        val = data[col].mode().iloc[0]
+                    data[col] = data[col].fillna(val)
+                    st.write(f"Imputed {col} with {impute_method} ({val})")
     else:
-        st.write("No missing values found.")
+        st.info("No missing values found.")
 
-    st.write("DATASET SUMMARY")
+    st.header("Target and Feature Selection")
     columns = data.columns.to_list()
-    st.write(f"THE DATASET HAS {len(columns)} COLUMNS: {columns}")
-
-    st.write("[target and feature selection]")
     target = st.selectbox('Select target variable', columns)
-    features = st.multiselect('Select feature columns', columns, default=[col for col in columns if col != target])
+    features = st.multiselect('Select feature columns', [col for col in columns if col != target], default=[col for col in columns if col != target])
 
     selected_columns = [target] + features
     non_numeric = [col for col in selected_columns if not pd.api.types.is_numeric_dtype(data[col])]
-
     if non_numeric:
-        st.warning(f"The following selected columns are not numeric: {non_numeric}. Please select only numeric columns for regression.")
+        st.warning(f"Selected non-numeric columns: {non_numeric}. Please pick numeric columns only.")
     else:
-        st.write(f"Selected target variable: {target}, Data_type: {type(target)} (should be <str>)")
-        st.write(f"Selected {len(features)} feature columns: {features}, Data_type: {type(features)} (should be <list>)")
-        st.write("----------------------------UNIVARIATE ANALYSIS TYPICAL FOR LINEAR REGRESSION-------------------------------------")
-        st.write("[Checking skewness and kurtosis of features]")
+        st.success("Numeric columns selected correctly.")
 
-        def recommendations_skew_kurt(col, skew_val, kurt_val):
-            st.write(f"Feature: {col}")
-            st.write(f"Skewness: {skew_val:.3f}")
-            st.write(f"Kurtosis: {kurt_val:.3f}")
-
-            if abs(skew_val) < 0.5:
-                st.write("  - Skewness near 0: data is approximately symmetric.")
-                skew_recommendation = "No transformation needed."
-            elif 0.5 <= abs(skew_val) < 1:
-                st.write("  - Moderate skewness detected.")
-                skew_recommendation = "Consider mild transformations such as square root or cube root."
-            else:
-                st.write("  - High skewness detected.")
-                skew_recommendation = "Consider log or Box-Cox/Yeo-Johnson transformation."
-
-            if 2 < kurt_val < 4:
-                st.write("  - Kurtosis near normal (3), no action needed.")
-                kurt_recommendation = "No transformation needed."
-            elif kurt_val >= 4:
-                st.write("  - High kurtosis: heavy tails/outliers likely.")
-                kurt_recommendation = "Consider outlier treatment like winsorizing/trimming."
-            else:
-                st.write("  - Low kurtosis: light tails, fewer outliers.")
-                kurt_recommendation = "Usually no transformation needed."
-
-            st.write("Recommendations:")
-            st.write(f"  - Skewness: {skew_recommendation}")
-            st.write(f"  - Kurtosis: {kurt_recommendation}")
-
+        st.header("Feature Analysis, Outlier Treatment & Transformation")
+        def plot_hist(col):
             fig, ax = plt.subplots()
             ax.hist(data[col], bins=30, color='c', edgecolor='k', alpha=0.65)
             ax.set_title(f'Distribution of {col}')
@@ -105,47 +70,120 @@ if uploaded_file is not None:
             ax.set_ylabel('Frequency')
             st.pyplot(fig)
 
-            st.write("[Outlier detection and treatment]")
-            def plot_boxplot(data_col, title):
-                fig, ax = plt.subplots()
-                ax.boxplot(data_col, vert=False)
-                ax.set_title(title)
-                ax.set_xlabel(col)
-                st.pyplot(fig)
+        def plot_boxplot(col, title):
+            fig, ax = plt.subplots()
+            ax.boxplot(data[col], vert=False)
+            ax.set_title(title)
+            ax.set_xlabel(col)
+            st.pyplot(fig)
 
-            plot_boxplot(data[col].dropna(), "Original Distribution with Outliers")
+        def treat_outliers(col):
+            st.subheader(f"Outliers in {col}")
+            plot_boxplot(col, "Original Boxplot with Outliers")
 
-            treatment = st.radio(
-                f"Choose outlier treatment for {col}",
-                ("None", "Remove outliers", "Clip outliers at percentiles"),
-                key=f"outlier_{col}"
-            )
-
-            if treatment == "Remove outliers":
+            treatment = st.radio(f"Outlier treatment for {col}", ("None", "Remove", "Clip"), key=f"outlier_{col}")
+            if treatment == "Remove":
                 Q1 = np.percentile(data[col], 25)
                 Q3 = np.percentile(data[col], 75)
                 IQR = Q3 - Q1
-                lower_bound = Q1 - 1.5 * IQR
-                upper_bound = Q3 + 1.5 * IQR
-                removed_count = ((data[col] < lower_bound) | (data[col] > upper_bound)).sum()
-                data[col] = data[col].where((data[col] >= lower_bound) & (data[col] <= upper_bound), np.nan)
-                st.write(f"Removed {removed_count} outlier values by setting them as NaN.")
-            elif treatment == "Clip outliers at percentiles":
-                lower_percentile = st.slider(f"Select lower percentile clip for {col}", 0, 20, 5, key=f"low_clip_{col}")
-                upper_percentile = st.slider(f"Select upper percentile clip for {col}", 80, 100, 95, key=f"high_clip_{col}")
-                lower_bound = np.percentile(data[col], lower_percentile)
-                upper_bound = np.percentile(data[col], upper_percentile)
-                data[col] = np.clip(data[col], lower_bound, upper_bound)
-                st.write(f"Clipped values outside {lower_percentile}th and {upper_percentile}th percentiles.")
-            else:
-                st.write("No outlier treatment applied.")
+                lower = Q1 - 1.5 * IQR
+                upper = Q3 + 1.5 * IQR
+                removed = ((data[col] < lower) | (data[col] > upper)).sum()
+                data[col] = data[col].where((data[col] >= lower) & (data[col] <= upper), np.nan)
+                st.write(f"Removed {removed} outliers (set as NaN).")
+            elif treatment == "Clip":
+                low_perc = st.slider(f"Lower percentile clip for {col}", 0, 20, 5, key=f"low_{col}")
+                high_perc = st.slider(f"Upper percentile clip for {col}", 80, 100, 95, key=f"high_{col}")
+                low_val = np.percentile(data[col], low_perc)
+                high_val = np.percentile(data[col], high_perc)
+                data[col] = np.clip(data[col], low_val, high_val)
+                st.write(f"Clipped to [{low_val:.3f}, {high_val:.3f}].")
 
             if treatment != "None":
-                plot_boxplot(data[col].dropna(), "Updated Distribution After Outlier Treatment")
+                plot_boxplot(col, "Boxplot After Outlier Treatment")
 
-            st.write("---")
+        def apply_transformations(col):
+            st.subheader(f"Transformation options for {col}")
+            plot_hist(col)
+
+            choice = st.selectbox(f"Choose transformation for {col}", 
+                                  ("None", "Log (log1p)", "Square root", "Box-Cox", "Yeo-Johnson"), key=f"transform_{col}")
+
+            if choice == "Log (log1p)":
+                if (data[col] < 0).any():
+                    st.warning("Negative values present, log transform skipped")
+                else:
+                    data[col] = np.log1p(data[col])
+                    st.write(f"Applied log1p transform on {col}")
+            elif choice == "Square root":
+                if (data[col] < 0).any():
+                    st.warning("Negative values present, sqrt transform skipped")
+                else:
+                    data[col] = np.sqrt(data[col])
+                    st.write(f"Applied square root transform on {col}")
+            elif choice == "Box-Cox":
+                if (data[col] <= 0).any():
+                    st.warning("Non-positive values present, Box-Cox skipped")
+                else:
+                    optimal_lambda = boxcox_normmax(data[col]+1e-6)
+                    data[col], _ = boxcox1p(data[col]+1e-6, optimal_lambda), optimal_lambda
+                    st.write(f"Applied Box-Cox transform on {col} with lambda={optimal_lambda:.3f}")
+            elif choice == "Yeo-Johnson":
+                optimal_lambda = yeojohnson_normmax(data[col])
+                data[col], _ = yeojohnson(data[col], optimal_lambda), optimal_lambda
+                st.write(f"Applied Yeo-Johnson transform on {col} with lambda={optimal_lambda:.3f}")
+            else:
+                st.write("No transformation applied.")
+            plot_hist(col)
 
         for col in features:
-            sk = skew(data[col].dropna())
-            ku = kurtosis(data[col].dropna())
-            recommendations_skew_kurt(col, sk, ku)
+            st.markdown(f"### Feature: {col}")
+            treat_outliers(col)
+            apply_transformations(col)
+
+        st.header("Final Feature Distribution & Statistics")
+        for col in features:
+            s, k = skew(data[col].dropna()), kurtosis(data[col].dropna())
+            st.write(f"Feature: {col}")
+            st.write(f"Skewness: {s:.3f}, Kurtosis: {k:.3f}")
+            plot_hist(col)
+            st.write("---")
+
+        st.header("Target Variable Analysis")
+        st.write(f"Target: {target}")
+        
+        st.write("Original target distribution:")
+        plot_hist(target)
+
+        st.write("Transformation options for target")
+        target_choice = st.selectbox("Transform target variable", 
+                                    ("None", "Log (log1p)", "Square root", "Box-Cox", "Yeo-Johnson"), key="target_transform")
+
+        if target_choice == "Log (log1p)":
+            if (data[target] < 0).any():
+                st.warning("Negative values present, log transform skipped for target")
+            else:
+                data[target] = np.log1p(data[target])
+                st.write("Applied log1p transform on target")
+        elif target_choice == "Square root":
+            if (data[target] < 0).any():
+                st.warning("Negative values present, sqrt transform skipped for target")
+            else:
+                data[target] = np.sqrt(data[target])
+                st.write("Applied square root transform on target")
+        elif target_choice == "Box-Cox":
+            if (data[target] <= 0).any():
+                st.warning("Non-positive values present, Box-Cox skipped for target")
+            else:
+                opt_lambda = boxcox_normmax(data[target]+1e-6)
+                data[target], _ = boxcox1p(data[target]+1e-6, opt_lambda), opt_lambda
+                st.write(f"Applied Box-Cox transform on target with lambda={opt_lambda:.3f}")
+        elif target_choice == "Yeo-Johnson":
+            opt_lambda = yeojohnson_normmax(data[target])
+            data[target], _ = yeojohnson(data[target], opt_lambda), opt_lambda
+            st.write(f"Applied Yeo-Johnson transform on target with lambda={opt_lambda:.3f}")
+        else:
+            st.write("No transformation applied on target")
+
+        st.write("Final target distribution:")
+        plot_hist(target)
