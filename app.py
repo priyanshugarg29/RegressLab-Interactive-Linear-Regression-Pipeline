@@ -15,3 +15,9 @@ data_columns = data.columns.to_list()
 st.write("[dataset columns extracted to list]")
 st.write(f"THE DATASET HAS {len(data_columns)} COLUMNS: {data_columns}")
 
+target = st.selectbox('Select target variable', columns)
+features = st.multiselect('Select feature columns', columns, default=[col for col in columns if col != target])
+
+st.write("Selected target variable:", target)
+st.write("Selected feature columns:", features)
+
