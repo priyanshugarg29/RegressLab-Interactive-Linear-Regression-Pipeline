@@ -92,6 +92,104 @@ if 'data_original' in locals():
     else:
         st.success("Numeric columns selected.")
 
+        def plot_distributions(col):
+            fig, axs = plt.subplots(1, 2, figsize=(10, 4))
+            axs[0].hist(data[col].dropna(), bins=30, color='c', edgecolor='k', alpha=0.7)
+            axs[0].set_title(f"Histogram of {col}")
+            axs[0].set_xlabel(col)
+            axs[0].set_ylabel("Frequency")
+
+            probplot(data[col].dropna(), dist="norm", plot=axs[1])
+            axs[1].set_title(f"Q-Q Plot of {col}")
+
+            plt.tight_layout()
+            st.pyplot(fig)
+            plt.close(fig)
+
+        def analyze_column(col):
+            st.subheader(f"Analysis for {col}")
+            col_data = data[col].copy()
+
+            orig_skew = skew(col_data.dropna())
+            orig_kurt = kurtosis(col_data.dropna())
+            st.write(f"Original skewness: {orig_skew:.3f}")
+            st.write(f"Original kurtosis: {orig_kurt:.3f}")
+
+            if abs(orig_skew) < 0.5:
+                st.write("- Skewness close to zero: roughly symmetric.")
+                skew_reco = "No transform needed."
+            elif 0.5 <= abs(orig_skew) < 1:
+                st.write("- Moderate skewness: consider sqrt or log transform.")
+                skew_reco = "Sqrt or log recommended."
+            else:
+                st.write("- High skewness: sqrt or log transform recommended.")
+                skew_reco = "Sqrt or log strongly recommended."
+            st.write(f"Skewness recommendation: {skew_reco}")
+
+            treatment = st.radio(f"Outlier treatment for {col}", ("None", "Remove outliers", "Clip outliers"), key=f"outlier_{col}")
+            if treatment == "Remove outliers":
+                Q1 = np.percentile(col_data, 25)
+                Q3 = np.percentile(col_data, 75)
+                IQR = Q3 - Q1
+                lower = Q1 - 1.5 * IQR
+                upper = Q3 + 1.5 * IQR
+                before_rows = len(col_data)
+                col_data = col_data.where((col_data >= lower) & (col_data <= upper))
+                removed = before_rows - col_data.dropna().shape[0]
+                st.write(f"Removed {removed} outliers (set to NaN).")
+            elif treatment == "Clip outliers":
+                low_pct = st.slider(f"Lower percentile clip for {col}", 0, 20, 5, key=f"lowclip_{col}")
+                high_pct = st.slider(f"Upper percentile clip for {col}", 80, 100, 95, key=f"highclip_{col}")
+                low_val = np.percentile(col_data.dropna(), low_pct)
+                high_val = np.percentile(col_data.dropna(), high_pct)
+                col_data = np.clip(col_data, low_val, high_val)
+                st.write(f"Clipped values outside [{low_val:.3f}, {high_val:.3f}].")
+
+            transformation = st.selectbox(f"Transformation for {col}", ("None", "Square root", "Log (log1p)"), key=f"trans_{col}")
+
+            if transformation == "Square root":
+                if (col_data < 0).any():
+                    st.warning("Negative values present, sqrt transform skipped.")
+                else:
+                    col_data = np.sqrt(col_data)
+                    st.write("Applied square root transformation.")
+            elif transformation == "Log (log1p)":
+                if (col_data < 0).any():
+                    st.warning("Negative values present, log1p transform skipped.")
+                else:
+                    col_data = np.log1p(col_data)
+                    st.write("Applied log1p transformation.")
+            else:
+                st.write("No transformation applied.")
+
+            data[col] = col_data
+
+            final_skew = skew(col_data.dropna())
+            final_kurt = kurtosis(col_data.dropna())
+            st.write(f"Final skewness: {final_skew:.3f}")
+            st.write(f"Final kurtosis: {final_kurt:.3f}")
+
+            plot_distributions(col)
+
+        for feature in features:
+            analyze_column(feature)
+
+        st.header("Target Variable Analysis")
+        analyze_column(target)
+
+        st.header("Correlation Matrix of Numeric Columns")
+        numeric_cols = data.select_dtypes(include=[np.number]).columns
+
+        if len(numeric_cols) > 1:
+            corr = data[numeric_cols].corr()
+            fig, ax = plt.subplots(figsize=(10, 8))
+            sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm", square=True, ax=ax)
+            ax.set_title("Correlation Matrix")
+            st.pyplot(fig)
+            plt.close(fig)
+        else:
+            st.info("Not enough numeric columns to show correlation matrix.")
+
         st.header("Feature Scaling Options")
         scaling_method = st.selectbox(
             "Choose a feature scaling method:",
@@ -112,23 +210,30 @@ if 'data_original' in locals():
             **Pros:** Centers data around zero with unit variance; improves gradient descent convergence.  
             **Cons:** Sensitive to outliers; assumes Gaussian-like distributions.
             """)
-            X_scaled, mean, std = manual_standard_scaler(X_raw)
+            mean = np.mean(X_raw, axis=0)
+            std = np.std(X_raw, axis=0)
+            X_scaled = (X_raw - mean) / std
 
         elif scaling_method == "Min-Max Scaling":
             st.write("""
             **Pros:** Scales features to [0,1]; useful when fixed range is important.  
             **Cons:** Sensitive to outliers; may distort feature distributions.
             """)
-            X_scaled, min_, max_ = manual_minmax_scaler(X_raw)
+            min_ = np.min(X_raw, axis=0)
+            max_ = np.max(X_raw, axis=0)
+            X_scaled = (X_raw - min_) / (max_ - min_)
 
         else:  # Robust Scaling
             st.write("""
             **Pros:** Uses median and IQR; robust to outliers.  
             **Cons:** Data not always centered; sometimes less efficient for well-behaved data.
             """)
-            X_scaled, median, iqr = manual_robust_scaler(X_raw)
+            median = np.median(X_raw, axis=0)
+            q1 = np.percentile(X_raw, 25, axis=0)
+            q3 = np.percentile(X_raw, 75, axis=0)
+            iqr = q3 - q1
+            X_scaled = (X_raw - median) / iqr
 
-        # Add intercept/bias column
         X = np.column_stack((np.ones(len(data)), X_scaled))
         y = data[target].values
 
@@ -203,24 +308,29 @@ if 'data_original' in locals():
         previous_cost = float('inf')
         for i in range(1, int(max_iterations)+1):
             cost = compute_cost(X, y, theta, reg_type, alpha)
-            st.write(f"--- Iteration {i} ---")
-            st.write(f"Current cost (loss): {cost:.12f}")
+            
+            # Print only every 10th iteration or last iteration
+            if i % 10 == 0 or i == int(max_iterations):
+                st.write(f"--- Iteration {i} ---")
+                st.write(f"Current cost (loss): {cost:.12f}")
 
-            param_desc = [f"Intercept (bias): {theta[0]:.6f}"]
-            param_desc += [f"Weight of feature '{feat}': {theta[j+1]:.6f}" for j, feat in enumerate(features)]
-            st.write("Parameters:")
-            for desc in param_desc:
-                st.write(f"- {desc}")
+                param_desc = [f"Intercept (bias): {theta[0]:.6f}"]
+                param_desc += [f"Weight of feature '{feat}': {theta[j+1]:.6f}" for j, feat in enumerate(features)]
+                st.write("Parameters:")
+                for desc in param_desc:
+                    st.write(f"- {desc}")
 
-            theta, grad = gradient_descent_step(X, y, theta, learning_rate, reg_type, alpha)
+                theta, grad = gradient_descent_step(X, y, theta, learning_rate, reg_type, alpha)
 
-            grad_desc = [f"Gradient for Intercept (bias): {grad[0]:.6f}"]
-            grad_desc += [f"Gradient for feature '{feat}': {grad[j+1]:.6f}" for j, feat in enumerate(features)]
-            st.write("Gradient:")
-            for desc in grad_desc:
-                st.write(f"- {desc}")
+                grad_desc = [f"Gradient for Intercept (bias): {grad[0]:.6f}"]
+                grad_desc += [f"Gradient for feature '{feat}': {grad[j+1]:.6f}" for j, feat in enumerate(features)]
+                st.write("Gradient:")
+                for desc in grad_desc:
+                    st.write(f"- {desc}")
 
-            st.write("Parameters updated by moving opposite the gradient to minimize the cost.\n")
+                st.write("Parameters updated by moving opposite the gradient to minimize the cost.\n")
+            else:
+                theta, grad = gradient_descent_step(X, y, theta, learning_rate, reg_type, alpha)
 
             cost_change = abs(previous_cost - cost)
             if cost_change < convergence_threshold:
@@ -231,5 +341,6 @@ if 'data_original' in locals():
 
         st.success("Gradient descent complete.")
         st.write("Final learned parameters:")
+        param_desc = [f"Intercept (bias): {theta[0]:.6f}"] + [f"Weight of feature '{feat}': {theta[j+1]:.6f}" for j, feat in enumerate(features)]
         for desc in param_desc:
             st.write(f"- {desc}")
