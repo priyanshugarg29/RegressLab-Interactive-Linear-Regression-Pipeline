@@ -370,6 +370,37 @@ if 'data_original' in locals():
         train_df['predicted_target'] = train_preds
         test_df['predicted_target'] = test_preds
 
+        def plot_predicted_vs_actual(actual, predicted, dataset_name):
+            residuals = np.abs(actual - predicted)
+            df_plot = pd.DataFrame({
+                'Actual': actual,
+                'Predicted': predicted,
+                'Residuals': residuals
+            })
+            fig = px.scatter(df_plot, x='Actual', y='Predicted', color='Residuals',
+                             color_continuous_scale='Viridis',
+                             labels={'Actual': 'Actual Values', 'Predicted': 'Predicted Values', 'Residuals': 'Absolute Residual'},
+                             title=f"Predicted vs Actual Values ({dataset_name})")
+            
+            # Add diagonal line for perfect prediction
+            fig.add_shape(
+                type='line',
+                x0=df_plot['Actual'].min(),
+                y0=df_plot['Actual'].min(),
+                x1=df_plot['Actual'].max(),
+                y1=df_plot['Actual'].max(),
+                line=dict(color='Red', dash='dash')
+            )
+            fig.update_layout(coloraxis_colorbar=dict(title="Abs Residual"))
+            st.plotly_chart(fig, use_container_width=True)
+
+        st.header("Predicted vs Actual Scatter Plot (Train Set)")
+        plot_predicted_vs_actual(y_train, train_preds, "Training Data")
+        
+        st.header("Predicted vs Actual Scatter Plot (Test Set)")
+        plot_predicted_vs_actual(y_test, test_preds, "Test Data")
+
+        
         st.header("Training Set Evaluation Metrics")
         train_metrics = evaluate_regression(y_train, train_preds)
         for metric, value in train_metrics.items():
