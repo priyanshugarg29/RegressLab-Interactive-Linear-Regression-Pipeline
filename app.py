@@ -77,6 +77,24 @@ if uploaded_file is not None:
             ax.set_xlabel(col)
             st.pyplot(fig)
 
+        def show_skew_kurt_recommendation(col):
+            s = skew(data[col].dropna())
+            k = kurtosis(data[col].dropna())
+            st.write(f"Skewness: {s:.3f}")
+            if abs(s) < 0.5:
+                st.write(" - Skewness near 0: data approx symmetric, no transform needed.")
+            elif 0.5 <= abs(s) < 1:
+                st.write(" - Moderate skewness: mild transform recommended (sqrt or log).")
+            else:
+                st.write(" - High skewness: strong transform recommended (sqrt or log).")
+            st.write(f"Kurtosis: {k:.3f}")
+            if 2 < k < 4:
+                st.write(" - Kurtosis near normal (3), no transform needed.")
+            elif k >= 4:
+                st.write(" - High kurtosis: consider outlier treatment.")
+            else:
+                st.write(" - Low kurtosis, no transform usually needed.")
+
         def treat_outliers(col):
             st.subheader(f"Outliers in {col}")
             plot_boxplot(col, "Original Boxplot with Outliers")
@@ -104,6 +122,7 @@ if uploaded_file is not None:
 
         def apply_transformations(col):
             st.subheader(f"Transformation options for {col}")
+            show_skew_kurt_recommendation(col)
             plot_hist(col)
 
             choice = st.selectbox(f"Choose transformation for {col}", ("None", "Square root", "Log (log1p)"), key=f"transform_{col}")
@@ -122,6 +141,7 @@ if uploaded_file is not None:
                     st.write(f"Applied log1p transform on {col}")
             else:
                 st.write("No transformation applied.")
+            show_skew_kurt_recommendation(col)
             plot_hist(col)
 
         for col in features:
@@ -131,15 +151,14 @@ if uploaded_file is not None:
 
         st.header("Final Feature Distribution & Statistics")
         for col in features:
-            s, k = skew(data[col].dropna()), kurtosis(data[col].dropna())
             st.write(f"Feature: {col}")
-            st.write(f"Skewness: {s:.3f}, Kurtosis: {k:.3f}")
+            show_skew_kurt_recommendation(col)
             plot_hist(col)
             st.write("---")
 
         st.header("Target Variable Analysis")
         st.write(f"Target: {target}")
-
+        show_skew_kurt_recommendation(target)
         plot_hist(target)
 
         target_choice = st.selectbox("Transform target variable", ("None", "Square root", "Log (log1p)"), key="target_transform")
@@ -159,4 +178,5 @@ if uploaded_file is not None:
         else:
             st.write("No transformation applied on target")
 
+        show_skew_kurt_recommendation(target)
         plot_hist(target)
