@@ -5,7 +5,6 @@ from scipy.stats import skew, kurtosis, probplot
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
-from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 
 st.title("RegressLab: Interactive Linear Regression Pipeline")
 
@@ -22,6 +21,23 @@ if uploaded_file is None:
 else:
     data_original = pd.read_csv(uploaded_file)
     st.success("Uploaded CSV loaded successfully.")
+
+def manual_standard_scaler(X):
+    mean = np.mean(X, axis=0)
+    std = np.std(X, axis=0)
+    return (X - mean) / std, mean, std
+
+def manual_minmax_scaler(X):
+    min_ = np.min(X, axis=0)
+    max_ = np.max(X, axis=0)
+    return (X - min_) / (max_ - min_), min_, max_
+
+def manual_robust_scaler(X):
+    median = np.median(X, axis=0)
+    q1 = np.percentile(X, 25, axis=0)
+    q3 = np.percentile(X, 75, axis=0)
+    iqr = q3 - q1
+    return (X - median) / iqr, median, iqr
 
 if 'data_original' in locals():
     data = data_original.copy()
@@ -82,38 +98,37 @@ if 'data_original' in locals():
             ("None", "Standardization (Z-score)", "Min-Max Scaling", "Robust Scaling")
         )
 
+        X_raw = data[features].values
+
         if scaling_method == "None":
             st.write("""
             **Pros:** No change to original data; preserves interpretability.  
-            **Cons:** Can cause slow or unstable convergence with gradient descent; regularization may be biased if features vary in scale.
+            **Cons:** Can cause slow or unstable convergence with gradient descent; regularization may be biased if features scale differently.
             """)
-            X_scaled = data[features].values
+            X_scaled = X_raw
 
         elif scaling_method == "Standardization (Z-score)":
             st.write("""
             **Pros:** Centers data around zero with unit variance; improves gradient descent convergence.  
             **Cons:** Sensitive to outliers; assumes Gaussian-like distributions.
             """)
-            scaler = StandardScaler()
-            X_scaled = scaler.fit_transform(data[features])
+            X_scaled, mean, std = manual_standard_scaler(X_raw)
 
         elif scaling_method == "Min-Max Scaling":
             st.write("""
             **Pros:** Scales features to [0,1]; useful when fixed range is important.  
             **Cons:** Sensitive to outliers; may distort feature distributions.
             """)
-            scaler = MinMaxScaler()
-            X_scaled = scaler.fit_transform(data[features])
+            X_scaled, min_, max_ = manual_minmax_scaler(X_raw)
 
         else:  # Robust Scaling
             st.write("""
             **Pros:** Uses median and IQR; robust to outliers.  
             **Cons:** Data not always centered; sometimes less efficient for well-behaved data.
             """)
-            scaler = RobustScaler()
-            X_scaled = scaler.fit_transform(data[features])
+            X_scaled, median, iqr = manual_robust_scaler(X_raw)
 
-        # Add intercept column (bias) to features
+        # Add intercept/bias column
         X = np.column_stack((np.ones(len(data)), X_scaled))
         y = data[target].values
 
@@ -131,9 +146,9 @@ if 'data_original' in locals():
 
         recommended_lr = 0.01
         st.info(f"Recommended learning rate is about {recommended_lr} to avoid divergence or slow learning.")
+
         learning_rate = st.number_input("Learning rate", min_value=1e-10, value=recommended_lr, step=1e-7, format="%e")
 
-        # Automatically set convergence threshold proportional to learning rate
         convergence_threshold = max(learning_rate * 1e-3, 1e-10)
         st.write(f"Automatically set convergence threshold = {convergence_threshold:.12f} (proportional to learning rate)")
 
