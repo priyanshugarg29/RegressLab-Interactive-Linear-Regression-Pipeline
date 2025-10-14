@@ -10,6 +10,16 @@ from sklearn.model_selection import train_test_split
 
 st.title("RegressLab: Interactive Linear Regression Pipeline")
 
+st.write("""
+Welcome to RegressLab!
+
+This interactive app walks you through the entire linear regression process — from data upload and cleaning, through exploratory and statistical analyses, to manually training models using gradient descent with customizable regularization and feature scaling.
+
+You can explore how the regression hyperplane fits your data visually in 3D for any pair of features, and evaluate your model’s predictive performance on training and test splits with detailed metrics.
+
+Designed for students and researchers, RegressLab makes learning linear regression transparent, hands-on, and intuitive.
+""")
+
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
 if uploaded_file is None:
