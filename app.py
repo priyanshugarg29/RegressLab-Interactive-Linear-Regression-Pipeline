@@ -18,6 +18,6 @@ st.write(f"THE DATASET HAS {len(columns)} COLUMNS: {columns}")
 target = st.selectbox('Select target variable', columns)
 features = st.multiselect('Select feature columns', columns, default=[col for col in columns if col != target])
 
-st.write("Selected target variable:", target)
-st.write("Selected feature columns:", features)
+st.write(f"Selected target variable: {target}")
+st.write(f"Selected {len(features)} feature columns: {features}")
 
