@@ -12,18 +12,21 @@ st.title("RegressLab: Interactive Linear Regression Pipeline")
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
 if uploaded_file is None:
-    if st.checkbox("Use default dataset for demonstration (advertising.csv)"):
-        default_path = os.path.join(os.path.dirname(__file__), "advertising.csv")
+    if st.checkbox("Use default dataset (appointments.csv)"):
+        default_path = os.path.join(os.path.dirname(__file__), "appointments.csv")
         if os.path.exists(default_path):
-            data = pd.read_csv(default_path)
-            st.success("Loaded default dataset: advertising.csv")
+            data_original = pd.read_csv(default_path)
+            st.success("Loaded default dataset: appointments.csv")
         else:
-            st.error("Default dataset advertising.csv not found in app directory.")
+            st.error("Default dataset appointments.csv not found in app directory.")
 else:
-    data = pd.read_csv(uploaded_file)
+    data_original = pd.read_csv(uploaded_file)
     st.success("Uploaded CSV loaded successfully.")
 
-if 'data' in locals():
+if 'data_original' in locals():
+    # Always work with a fresh copy of original data to reset changes
+    data = data_original.copy()
+
     st.header("Initial Data Preview and Quality Checks")
     st.write(data.head())
 
@@ -31,7 +34,8 @@ if 'data' in locals():
     if dup_count > 0:
         with st.expander("Duplicate Records Detected"):
             st.write(f"Duplicate records found: {dup_count}")
-            if st.radio("Drop duplicate rows?", ("Yes", "No")) == "Yes":
+            drop_dups = st.radio("Drop duplicate rows?", ("Yes", "No"))
+            if drop_dups == "Yes":
                 data = data.drop_duplicates()
                 st.write(f"Duplicates dropped. New data shape: {data.shape}")
     else:
@@ -43,11 +47,11 @@ if 'data' in locals():
         with st.expander("Missing Values Info"):
             st.write("Columns with missing values (percentage):")
             st.write(missing_info)
-            action = st.radio("Handle missing values:", ("Drop rows", "Impute", "Do nothing"))
-            if action == "Drop rows":
+            missing_action = st.radio("Handle missing values:", ("Drop rows", "Impute", "Do nothing"))
+            if missing_action == "Drop rows":
                 data = data.dropna()
                 st.write(f"Rows with missing values dropped. New shape: {data.shape}")
-            elif action == "Impute":
+            elif missing_action == "Impute":
                 for col in missing_info.index:
                     impute_method = st.selectbox(f"Imputation method for {col}", ("Mean", "Median", "Mode"), key=f"impute_{col}")
                     if impute_method == "Mean":
@@ -90,8 +94,11 @@ if 'data' in locals():
         def analyze_column(col):
             st.subheader(f"Analysis for {col}")
 
-            orig_skew = skew(data[col].dropna())
-            orig_kurt = kurtosis(data[col].dropna())
+            # We'll apply transformations and outlier treatment on a working copy column
+            col_data = data[col].copy()
+
+            orig_skew = skew(col_data.dropna())
+            orig_kurt = kurtosis(col_data.dropna())
             st.write(f"Original skewness: {orig_skew:.3f}")
             st.write(f"Original kurtosis: {orig_kurt:.3f}")
 
@@ -108,44 +115,45 @@ if 'data' in locals():
 
             treatment = st.radio(f"Outlier treatment for {col}", ("None", "Remove outliers", "Clip outliers"), key=f"outlier_{col}")
             if treatment == "Remove outliers":
-                Q1 = np.percentile(data[col], 25)
-                Q3 = np.percentile(data[col], 75)
+                Q1 = np.percentile(col_data, 25)
+                Q3 = np.percentile(col_data, 75)
                 IQR = Q3 - Q1
                 lower = Q1 - 1.5 * IQR
                 upper = Q3 + 1.5 * IQR
-                before_rows = data.shape[0]
-                data[col] = data[col].where((data[col] >= lower) & (data[col] <= upper), np.nan)
-                data.dropna(inplace=True)
-                after_rows = data.shape[0]
-                removed = before_rows - after_rows
-                st.write(f"Removed {removed} rows due to outliers.")
+                before_rows = len(col_data)
+                col_data = col_data.where((col_data >= lower) & (col_data <= upper))
+                removed = before_rows - col_data.dropna().shape[0]
+                st.write(f"Removed {removed} outliers (set to NaN).")
             elif treatment == "Clip outliers":
                 low_pct = st.slider(f"Lower percentile clip for {col}", 0, 20, 5, key=f"lowclip_{col}")
                 high_pct = st.slider(f"Upper percentile clip for {col}", 80, 100, 95, key=f"highclip_{col}")
-                low_val = np.percentile(data[col], low_pct)
-                high_val = np.percentile(data[col], high_pct)
-                data[col] = np.clip(data[col], low_val, high_val)
+                low_val = np.percentile(col_data.dropna(), low_pct)
+                high_val = np.percentile(col_data.dropna(), high_pct)
+                col_data = np.clip(col_data, low_val, high_val)
                 st.write(f"Clipped values outside [{low_val:.3f}, {high_val:.3f}].")
 
             transformation = st.selectbox(f"Transformation for {col}", ("None", "Square root", "Log (log1p)"), key=f"trans_{col}")
 
             if transformation == "Square root":
-                if (data[col] < 0).any():
+                if (col_data < 0).any():
                     st.warning("Negative values present, sqrt transform skipped.")
                 else:
-                    data[col] = np.sqrt(data[col])
+                    col_data = np.sqrt(col_data)
                     st.write("Applied square root transformation.")
             elif transformation == "Log (log1p)":
-                if (data[col] < 0).any():
+                if (col_data < 0).any():
                     st.warning("Negative values present, log1p transform skipped.")
                 else:
-                    data[col] = np.log1p(data[col])
+                    col_data = np.log1p(col_data)
                     st.write("Applied log1p transformation.")
             else:
                 st.write("No transformation applied.")
 
-            final_skew = skew(data[col].dropna())
-            final_kurt = kurtosis(data[col].dropna())
+            # Update data[col] with current version after treatment and transformation
+            data[col] = col_data
+
+            final_skew = skew(col_data.dropna())
+            final_kurt = kurtosis(col_data.dropna())
             st.write(f"Final skewness: {final_skew:.3f}")
             st.write(f"Final kurtosis: {final_kurt:.3f}")
 
