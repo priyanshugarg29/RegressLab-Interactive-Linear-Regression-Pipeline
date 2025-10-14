@@ -12,13 +12,13 @@ st.title("RegressLab: Interactive Linear Regression Pipeline")
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
 if uploaded_file is None:
-    if st.checkbox("Use default dataset (appointments.csv)"):
-        default_path = os.path.join(os.path.dirname(__file__), "appointments.csv")
+    if st.checkbox("Use default dataset for demonstration (advertising.csv)"):
+        default_path = os.path.join(os.path.dirname(__file__), "advertising.csv")
         if os.path.exists(default_path):
             data = pd.read_csv(default_path)
-            st.success("Loaded default dataset: appointments.csv")
+            st.success("Loaded default dataset: advertising.csv")
         else:
-            st.error("Default dataset appointments.csv not found in app directory.")
+            st.error("Default dataset advertising.csv not found in app directory.")
 else:
     data = pd.read_csv(uploaded_file)
     st.success("Uploaded CSV loaded successfully.")
