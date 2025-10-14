@@ -5,13 +5,25 @@ from scipy.stats import skew, kurtosis, probplot
 import matplotlib.pyplot as plt
 import io
 import seaborn as sns
+import os
 
 st.title("RegressLab: Interactive Linear Regression Pipeline")
 
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
-if uploaded_file is not None:
-    data = pd.read_csv(uploaded_file)
 
+if uploaded_file is None:
+    if st.checkbox("Use default dataset (appointments.csv)"):
+        default_path = os.path.join(os.path.dirname(__file__), "appointments.csv")
+        if os.path.exists(default_path):
+            data = pd.read_csv(default_path)
+            st.success("Loaded default dataset: appointments.csv")
+        else:
+            st.error("Default dataset appointments.csv not found in app directory.")
+else:
+    data = pd.read_csv(uploaded_file)
+    st.success("Uploaded CSV loaded successfully.")
+
+if 'data' in locals():
     st.header("Initial Data Preview and Quality Checks")
     st.write(data.head())
 
@@ -61,9 +73,6 @@ if uploaded_file is not None:
     else:
         st.success("Numeric columns selected.")
 
-        final_stats = {}
-        final_plots = {}
-
         def plot_distributions(col):
             fig, axs = plt.subplots(1, 2, figsize=(10, 4))
             axs[0].hist(data[col].dropna(), bins=30, color='c', edgecolor='k', alpha=0.7)
@@ -76,12 +85,7 @@ if uploaded_file is not None:
 
             plt.tight_layout()
             st.pyplot(fig)
-
-            buf = io.BytesIO()
-            fig.savefig(buf, format="png")
-            buf.seek(0)
             plt.close(fig)
-            return buf
 
         def analyze_column(col):
             st.subheader(f"Analysis for {col}")
@@ -145,17 +149,7 @@ if uploaded_file is not None:
             st.write(f"Final skewness: {final_skew:.3f}")
             st.write(f"Final kurtosis: {final_kurt:.3f}")
 
-            buf = plot_distributions(col)
-
-            final_stats[col] = {
-                "original_skew": orig_skew,
-                "original_kurtosis": orig_kurt,
-                "final_skew": final_skew,
-                "final_kurtosis": final_kurt,
-                "transformation": transformation,
-                "outlier_treatment": treatment
-            }
-            final_plots[col] = buf
+            plot_distributions(col)
 
         for feature in features:
             analyze_column(feature)
@@ -165,7 +159,6 @@ if uploaded_file is not None:
 
         st.header("Correlation Matrix of Numeric Columns")
         numeric_cols = data.select_dtypes(include=[np.number]).columns
-        corr_fig_buf = None
 
         if len(numeric_cols) > 1:
             corr = data[numeric_cols].corr()
@@ -173,12 +166,9 @@ if uploaded_file is not None:
             sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm", square=True, ax=ax)
             ax.set_title("Correlation Matrix")
             st.pyplot(fig)
-            corr_fig_buf = io.BytesIO()
-            fig.savefig(corr_fig_buf, format="png")
-            corr_fig_buf.seek(0)
             plt.close(fig)
         else:
             st.info("Not enough numeric columns to show correlation matrix.")
 
         st.header("Summary")
-        st.write("Final feature and target statistics and plots are ready to be passed for linear regression suitability analysis.")
+        st.write("Final feature and target statistics and plots are ready to be used for linear regression analysis.")
