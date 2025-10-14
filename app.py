@@ -310,7 +310,7 @@ if 'data_original' in locals():
         for i in range(1, int(max_iterations)+1):
             cost = compute_cost(X, y, theta, reg_type, alpha)
             
-            # Print only every 10th iteration or last iteration
+            # Print only every 10th iteration and last iteration
             if i % 10 == 0 or i == int(max_iterations):
                 st.write(f"--- Iteration {i} ---")
                 st.write(f"Current cost (loss): {cost:.12f}")
@@ -347,21 +347,16 @@ if 'data_original' in locals():
             st.write(f"- {desc}")
 
         st.write("------")
+        # 3D Visualization for 2 features only
         if len(features) == 2:
             st.header("3D Visualization of Regression Plane and Data Points")
-        
-            # Create meshgrid for plane
+
             x_range = np.linspace(X_scaled[:, 0].min(), X_scaled[:, 0].max(), 30)
             y_range = np.linspace(X_scaled[:, 1].min(), X_scaled[:, 1].max(), 30)
             xx, yy = np.meshgrid(x_range, y_range)
-        
-            # Calculate predicted z = theta0 + theta1*x + theta2*y
-            # Remember intercept theta[0]
+
             zz = theta[0] + theta[1] * xx + theta[2] * yy
-        
-            # Prepare scatter points (scaled features transformed back to original scale)
-            # Depending on your scaling method, you may want to invert scaling here.
-            # For simplicity, plot scaled features directly.
+
             scatter = go.Scatter3d(
                 x=X_scaled[:, 0],
                 y=X_scaled[:, 1],
@@ -370,7 +365,7 @@ if 'data_original' in locals():
                 marker=dict(size=5, color='red'),
                 name='Data Points'
             )
-        
+
             plane = go.Surface(
                 x=xx,
                 y=yy,
@@ -379,7 +374,7 @@ if 'data_original' in locals():
                 opacity=0.6,
                 name='Regression Plane'
             )
-        
+
             layout = go.Layout(
                 scene=dict(
                     xaxis_title=features[0],
@@ -390,10 +385,8 @@ if 'data_original' in locals():
                 height=600,
                 margin=dict(l=0, r=0, b=0, t=0)
             )
-        
+
             fig = go.Figure(data=[scatter, plane], layout=layout)
-        
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("3D visualization requires exactly 2 features selected.")
-                
