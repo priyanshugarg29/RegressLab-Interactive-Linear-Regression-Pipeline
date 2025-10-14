@@ -444,4 +444,6 @@ if 'data_original' in locals():
 
 
             fig = go.Figure(data=[scatter3d, surface3d], layout=layout)
+            st.plotly_chart(fig, use_container_width=True)
+
 
