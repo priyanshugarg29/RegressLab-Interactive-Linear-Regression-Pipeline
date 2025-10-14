@@ -5,6 +5,7 @@ from scipy.stats import skew, kurtosis, probplot
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
+from sklearn.preprocessing import StandardScaler
 
 st.title("RegressLab: Interactive Linear Regression Pipeline")
 
@@ -75,103 +76,11 @@ if 'data_original' in locals():
     else:
         st.success("Numeric columns selected.")
 
-        def plot_distributions(col):
-            fig, axs = plt.subplots(1, 2, figsize=(10, 4))
-            axs[0].hist(data[col].dropna(), bins=30, color='c', edgecolor='k', alpha=0.7)
-            axs[0].set_title(f"Histogram of {col}")
-            axs[0].set_xlabel(col)
-            axs[0].set_ylabel("Frequency")
-
-            probplot(data[col].dropna(), dist="norm", plot=axs[1])
-            axs[1].set_title(f"Q-Q Plot of {col}")
-
-            plt.tight_layout()
-            st.pyplot(fig)
-            plt.close(fig)
-
-        def analyze_column(col):
-            st.subheader(f"Analysis for {col}")
-            col_data = data[col].copy()
-
-            orig_skew = skew(col_data.dropna())
-            orig_kurt = kurtosis(col_data.dropna())
-            st.write(f"Original skewness: {orig_skew:.3f}")
-            st.write(f"Original kurtosis: {orig_kurt:.3f}")
-
-            if abs(orig_skew) < 0.5:
-                st.write("- Skewness close to zero: roughly symmetric.")
-                skew_reco = "No transform needed."
-            elif 0.5 <= abs(orig_skew) < 1:
-                st.write("- Moderate skewness: consider sqrt or log transform.")
-                skew_reco = "Sqrt or log recommended."
-            else:
-                st.write("- High skewness: sqrt or log transform recommended.")
-                skew_reco = "Sqrt or log strongly recommended."
-            st.write(f"Skewness recommendation: {skew_reco}")
-
-            treatment = st.radio(f"Outlier treatment for {col}", ("None", "Remove outliers", "Clip outliers"), key=f"outlier_{col}")
-            if treatment == "Remove outliers":
-                Q1 = np.percentile(col_data, 25)
-                Q3 = np.percentile(col_data, 75)
-                IQR = Q3 - Q1
-                lower = Q1 - 1.5 * IQR
-                upper = Q3 + 1.5 * IQR
-                before_rows = len(col_data)
-                col_data = col_data.where((col_data >= lower) & (col_data <= upper))
-                removed = before_rows - col_data.dropna().shape[0]
-                st.write(f"Removed {removed} outliers (set to NaN).")
-            elif treatment == "Clip outliers":
-                low_pct = st.slider(f"Lower percentile clip for {col}", 0, 20, 5, key=f"lowclip_{col}")
-                high_pct = st.slider(f"Upper percentile clip for {col}", 80, 100, 95, key=f"highclip_{col}")
-                low_val = np.percentile(col_data.dropna(), low_pct)
-                high_val = np.percentile(col_data.dropna(), high_pct)
-                col_data = np.clip(col_data, low_val, high_val)
-                st.write(f"Clipped values outside [{low_val:.3f}, {high_val:.3f}].")
-
-            transformation = st.selectbox(f"Transformation for {col}", ("None", "Square root", "Log (log1p)"), key=f"trans_{col}")
-
-            if transformation == "Square root":
-                if (col_data < 0).any():
-                    st.warning("Negative values present, sqrt transform skipped.")
-                else:
-                    col_data = np.sqrt(col_data)
-                    st.write("Applied square root transformation.")
-            elif transformation == "Log (log1p)":
-                if (col_data < 0).any():
-                    st.warning("Negative values present, log1p transform skipped.")
-                else:
-                    col_data = np.log1p(col_data)
-                    st.write("Applied log1p transformation.")
-            else:
-                st.write("No transformation applied.")
-
-            data[col] = col_data
-
-            final_skew = skew(col_data.dropna())
-            final_kurt = kurtosis(col_data.dropna())
-            st.write(f"Final skewness: {final_skew:.3f}")
-            st.write(f"Final kurtosis: {final_kurt:.3f}")
-
-            plot_distributions(col)
-
-        for feature in features:
-            analyze_column(feature)
-
-        st.header("Target Variable Analysis")
-        analyze_column(target)
-
-        st.header("Correlation Matrix of Numeric Columns")
-        numeric_cols = data.select_dtypes(include=[np.number]).columns
-
-        if len(numeric_cols) > 1:
-            corr = data[numeric_cols].corr()
-            fig, ax = plt.subplots(figsize=(10, 8))
-            sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm", square=True, ax=ax)
-            ax.set_title("Correlation Matrix")
-            st.pyplot(fig)
-            plt.close(fig)
-        else:
-            st.info("Not enough numeric columns to show correlation matrix.")
+        # Scale features
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(data[features])
+        X = np.column_stack((np.ones(len(data)), X_scaled))
+        y = data[target].values
 
         st.header("Manual Gradient Descent for Linear Regression")
 
@@ -185,12 +94,16 @@ if 'data_original' in locals():
         else:
             alpha = 0.0
 
-        learning_rate = st.number_input("Learning rate", min_value=1e-10, value=0.01, step=1e-4, format="%f")
-        max_iterations = st.number_input("Maximum iterations", min_value=10, value=1000, step=10)
-        convergence_threshold = st.number_input("Convergence threshold (change in cost)", min_value=1e-12, max_value=1.0, value=1e-6, format="%.10f")
+        recommended_lr = 0.01
+        st.info(f"Recommended learning rate is about {recommended_lr} to avoid divergence or slow learning.")
 
-        X = np.column_stack((np.ones(data.shape[0]), data[features].values))
-        y = data[target].values
+        learning_rate = st.number_input("Learning rate", min_value=1e-10, value=recommended_lr, step=1e-5, format="%f")
+
+        # Automatically set convergence threshold proportional to learning rate
+        convergence_threshold = max(learning_rate * 1e-3, 1e-10)
+        st.write(f"Automatically set convergence threshold = {convergence_threshold:.12f} (proportional to learning rate)")
+
+        max_iterations = st.number_input("Maximum iterations", min_value=10, value=1000, step=10)
 
         theta = np.zeros(X.shape[1])
 
@@ -242,7 +155,7 @@ if 'data_original' in locals():
         for i in range(1, int(max_iterations)+1):
             cost = compute_cost(X, y, theta, reg_type, alpha)
             st.write(f"--- Iteration {i} ---")
-            st.write(f"Current cost (loss): {cost:.10f}")
+            st.write(f"Current cost (loss): {cost:.12f}")
 
             param_desc = [f"Intercept (bias): {theta[0]:.6f}"]
             param_desc += [f"Weight of feature '{feat}': {theta[j+1]:.6f}" for j, feat in enumerate(features)]
@@ -262,7 +175,7 @@ if 'data_original' in locals():
 
             cost_change = abs(previous_cost - cost)
             if cost_change < convergence_threshold:
-                st.write(f"Convergence achieved: cost change {cost_change:.12f} < threshold {convergence_threshold}")
+                st.write(f"Convergence achieved: cost change {cost_change:.12f} < threshold {convergence_threshold:.12f}")
                 st.write(f"Stopping gradient descent at iteration {i}.")
                 break
             previous_cost = cost
