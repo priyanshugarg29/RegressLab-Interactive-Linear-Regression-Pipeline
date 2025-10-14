@@ -11,9 +11,9 @@ if uploaded_file is not None:
     st.write(data.head())
 
 st.write("DATASET SUMMARY")
-data_columns = data.columns.to_list()
+columns = data.columns.to_list()
 st.write("[dataset columns extracted to list]")
-st.write(f"THE DATASET HAS {len(data_columns)} COLUMNS: {data_columns}")
+st.write(f"THE DATASET HAS {len(columns)} COLUMNS: {columns}")
 
 target = st.selectbox('Select target variable', columns)
 features = st.multiselect('Select feature columns', columns, default=[col for col in columns if col != target])
