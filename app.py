@@ -5,6 +5,7 @@ from scipy.stats import skew, kurtosis, probplot
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
+import plotly.graph_objs as go
 
 st.title("RegressLab: Interactive Linear Regression Pipeline")
 
