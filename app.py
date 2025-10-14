@@ -431,5 +431,17 @@ if 'data_original' in locals():
                 name='Regression Plane'
             )
 
+            layout = go.Layout(
+                scene=dict(
+                    xaxis_title=feature_pair_1,
+                    yaxis_title=feature_pair_2,
+                    zaxis_title=target,
+                ),
+                width=800,
+                height=600,
+                margin=dict(l=0, r=0, b=0, t=0)
+            )
+
+
             fig = go.Figure(data=[scatter3d, surface3d], layout=layout)
 
