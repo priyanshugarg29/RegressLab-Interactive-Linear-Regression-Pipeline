@@ -1,8 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from scipy.stats import skew, kurtosis, boxcox_normmax, yeojohnson_normmax
-from scipy.special import boxcox1p, yeojohnson
+from scipy.stats import skew, kurtosis
 import matplotlib.pyplot as plt
 
 st.title("RegressLab: Interactive Linear Regression Pipeline")
@@ -62,6 +61,7 @@ if uploaded_file is not None:
         st.success("Numeric columns selected correctly.")
 
         st.header("Feature Analysis, Outlier Treatment & Transformation")
+
         def plot_hist(col):
             fig, ax = plt.subplots()
             ax.hist(data[col], bins=30, color='c', edgecolor='k', alpha=0.65)
@@ -106,32 +106,20 @@ if uploaded_file is not None:
             st.subheader(f"Transformation options for {col}")
             plot_hist(col)
 
-            choice = st.selectbox(f"Choose transformation for {col}", 
-                                  ("None", "Log (log1p)", "Square root", "Box-Cox", "Yeo-Johnson"), key=f"transform_{col}")
+            choice = st.selectbox(f"Choose transformation for {col}", ("None", "Square root", "Log (log1p)"), key=f"transform_{col}")
 
-            if choice == "Log (log1p)":
-                if (data[col] < 0).any():
-                    st.warning("Negative values present, log transform skipped")
-                else:
-                    data[col] = np.log1p(data[col])
-                    st.write(f"Applied log1p transform on {col}")
-            elif choice == "Square root":
+            if choice == "Square root":
                 if (data[col] < 0).any():
                     st.warning("Negative values present, sqrt transform skipped")
                 else:
                     data[col] = np.sqrt(data[col])
                     st.write(f"Applied square root transform on {col}")
-            elif choice == "Box-Cox":
-                if (data[col] <= 0).any():
-                    st.warning("Non-positive values present, Box-Cox skipped")
+            elif choice == "Log (log1p)":
+                if (data[col] < 0).any():
+                    st.warning("Negative values present, log1p transform skipped")
                 else:
-                    optimal_lambda = boxcox_normmax(data[col]+1e-6)
-                    data[col], _ = boxcox1p(data[col]+1e-6, optimal_lambda), optimal_lambda
-                    st.write(f"Applied Box-Cox transform on {col} with lambda={optimal_lambda:.3f}")
-            elif choice == "Yeo-Johnson":
-                optimal_lambda = yeojohnson_normmax(data[col])
-                data[col], _ = yeojohnson(data[col], optimal_lambda), optimal_lambda
-                st.write(f"Applied Yeo-Johnson transform on {col} with lambda={optimal_lambda:.3f}")
+                    data[col] = np.log1p(data[col])
+                    st.write(f"Applied log1p transform on {col}")
             else:
                 st.write("No transformation applied.")
             plot_hist(col)
@@ -151,39 +139,24 @@ if uploaded_file is not None:
 
         st.header("Target Variable Analysis")
         st.write(f"Target: {target}")
-        
-        st.write("Original target distribution:")
+
         plot_hist(target)
 
-        st.write("Transformation options for target")
-        target_choice = st.selectbox("Transform target variable", 
-                                    ("None", "Log (log1p)", "Square root", "Box-Cox", "Yeo-Johnson"), key="target_transform")
+        target_choice = st.selectbox("Transform target variable", ("None", "Square root", "Log (log1p)"), key="target_transform")
 
-        if target_choice == "Log (log1p)":
-            if (data[target] < 0).any():
-                st.warning("Negative values present, log transform skipped for target")
-            else:
-                data[target] = np.log1p(data[target])
-                st.write("Applied log1p transform on target")
-        elif target_choice == "Square root":
+        if target_choice == "Square root":
             if (data[target] < 0).any():
                 st.warning("Negative values present, sqrt transform skipped for target")
             else:
                 data[target] = np.sqrt(data[target])
                 st.write("Applied square root transform on target")
-        elif target_choice == "Box-Cox":
-            if (data[target] <= 0).any():
-                st.warning("Non-positive values present, Box-Cox skipped for target")
+        elif target_choice == "Log (log1p)":
+            if (data[target] < 0).any():
+                st.warning("Negative values present, log1p transform skipped for target")
             else:
-                opt_lambda = boxcox_normmax(data[target]+1e-6)
-                data[target], _ = boxcox1p(data[target]+1e-6, opt_lambda), opt_lambda
-                st.write(f"Applied Box-Cox transform on target with lambda={opt_lambda:.3f}")
-        elif target_choice == "Yeo-Johnson":
-            opt_lambda = yeojohnson_normmax(data[target])
-            data[target], _ = yeojohnson(data[target], opt_lambda), opt_lambda
-            st.write(f"Applied Yeo-Johnson transform on target with lambda={opt_lambda:.3f}")
+                data[target] = np.log1p(data[target])
+                st.write("Applied log1p transform on target")
         else:
             st.write("No transformation applied on target")
 
-        st.write("Final target distribution:")
         plot_hist(target)
