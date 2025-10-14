@@ -345,3 +345,55 @@ if 'data_original' in locals():
         param_desc = [f"Intercept (bias): {theta[0]:.6f}"] + [f"Weight of feature '{feat}': {theta[j+1]:.6f}" for j, feat in enumerate(features)]
         for desc in param_desc:
             st.write(f"- {desc}")
+
+        st.write("------")
+        if len(features) == 2:
+            st.header("3D Visualization of Regression Plane and Data Points")
+        
+            # Create meshgrid for plane
+            x_range = np.linspace(X_scaled[:, 0].min(), X_scaled[:, 0].max(), 30)
+            y_range = np.linspace(X_scaled[:, 1].min(), X_scaled[:, 1].max(), 30)
+            xx, yy = np.meshgrid(x_range, y_range)
+        
+            # Calculate predicted z = theta0 + theta1*x + theta2*y
+            # Remember intercept theta[0]
+            zz = theta[0] + theta[1] * xx + theta[2] * yy
+        
+            # Prepare scatter points (scaled features transformed back to original scale)
+            # Depending on your scaling method, you may want to invert scaling here.
+            # For simplicity, plot scaled features directly.
+            scatter = go.Scatter3d(
+                x=X_scaled[:, 0],
+                y=X_scaled[:, 1],
+                z=y,
+                mode='markers',
+                marker=dict(size=5, color='red'),
+                name='Data Points'
+            )
+        
+            plane = go.Surface(
+                x=xx,
+                y=yy,
+                z=zz,
+                colorscale='Viridis',
+                opacity=0.6,
+                name='Regression Plane'
+            )
+        
+            layout = go.Layout(
+                scene=dict(
+                    xaxis_title=features[0],
+                    yaxis_title=features[1],
+                    zaxis_title=target,
+                ),
+                width=800,
+                height=600,
+                margin=dict(l=0, r=0, b=0, t=0)
+            )
+        
+            fig = go.Figure(data=[scatter, plane], layout=layout)
+        
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("3D visualization requires exactly 2 features selected.")
+                
