@@ -232,6 +232,8 @@ if 'data_original' in locals():
         else:
             st.info("Not enough numeric columns to show correlation matrix.")
 
+        data = data.dropna()
+
         split_ratio = st.slider("Train-Test Split Ratio (Train %)", 0.1, 0.9, 0.8, 0.05)
         train_df, test_df = train_test_split(data, train_size=split_ratio, random_state=42)
 
