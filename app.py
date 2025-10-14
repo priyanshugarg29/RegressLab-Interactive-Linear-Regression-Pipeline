@@ -5,6 +5,7 @@ from scipy.stats import skew, kurtosis, probplot
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
+import plotly.express as px
 import plotly.graph_objs as go
 from sklearn.model_selection import train_test_split
 
