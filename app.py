@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 from scipy.stats import skew, kurtosis, probplot
 import matplotlib.pyplot as plt
-import io
 import seaborn as sns
 import os
 
@@ -174,40 +173,87 @@ if 'data_original' in locals():
         else:
             st.info("Not enough numeric columns to show correlation matrix.")
 
-        st.header("Choose Linear Regression Cost Function")
+        st.header("Manual Gradient Descent for Linear Regression")
 
-        cost_function = st.selectbox(
-            "Select your preferred cost function:",
-            ("Mean Squared Error (MSE)", "Mean Absolute Error (MAE)", "Huber Loss")
+        reg_type = st.selectbox(
+            "Choose regularization:",
+            ("None", "L1 (Lasso)", "L2 (Ridge)", "Elastic Net")
         )
-        
-        if cost_function == "Mean Squared Error (MSE)":
-            st.markdown("""
-            **Pros:**
-            - Differentiable everywhere, easy optimization using gradient descent.
-            - Penalizes larger errors more strongly, promoting smaller overall error variance.
-            
-            **Cons:**
-            - Sensitive to outliers, which can skew the model fit.
-            """)
-        
-        elif cost_function == "Mean Absolute Error (MAE)":
-            st.markdown("""
-            **Pros:**
-            - More robust to outliers than MSE.
-            - Simple interpretation as average absolute deviation.
-            
-            **Cons:**
-            - Not differentiable at zero, which can complicate gradient-based optimization.
-            """)
-        
-        else:  # Huber Loss
-            st.markdown("""
-            **Pros:**
-            - Combines advantages of MSE and MAE.
-            - Quadratic for small errors, linear for large errors (robust to outliers).
-            
-            **Cons:**
-            - Requires tuning a hyperparameter (delta) to define the threshold between quadratic and linear behavior.
-            """)
 
+        if reg_type == "Elastic Net":
+            alpha = st.number_input("Alpha (Regularization strength)", min_value=0.0, value=0.1, step=0.01)
+        else:
+            alpha = 0.0
+
+        learning_rate = st.number_input("Learning rate", min_value=0.0001, value=0.01, step=0.001)
+        iterations = st.number_input("Number of iterations", min_value=10, value=50, step=10)
+
+        # Prepare data matrix X and target vector y for gradient descent
+        X = np.column_stack((np.ones(data.shape[0]), data[features].values))
+        y = data[target].values
+
+        theta = np.zeros(X.shape[1])
+
+        st.write(f"Starting manual gradient descent for {iterations} iterations with {reg_type} regularization...")
+        if reg_type == "None":
+            st.write("No regularization will be applied.")
+        elif reg_type == "L1 (Lasso)":
+            st.write("L1 regularization will be applied, promoting sparsity in coefficients.")
+        elif reg_type == "L2 (Ridge)":
+            st.write("L2 regularization will be applied, shrinking coefficients towards zero.")
+        else:
+            st.write(f"Elastic Net regularization with alpha={alpha} and mixing parameter 0.5 will be applied.")
+
+        def compute_cost(X, y, theta, reg_type, alpha):
+            m = len(y)
+            predictions = X.dot(theta)
+            errors = predictions - y
+            mse = (1/(2*m)) * np.sum(errors ** 2)
+
+            if reg_type == "None":
+                reg_term = 0
+            elif reg_type == "L1 (Lasso)":
+                reg_term = alpha * np.sum(np.abs(theta[1:])) / m
+            elif reg_type == "L2 (Ridge)":
+                reg_term = (alpha/(2*m)) * np.sum(theta[1:] ** 2)
+            else:  # Elastic Net
+                l1_ratio = 0.5
+                l1 = np.sum(np.abs(theta[1:]))
+                l2 = np.sum(theta[1:] ** 2)
+                reg_term = alpha * (l1_ratio * l1 + (1 - l1_ratio) * l2/2) / m
+            return mse + reg_term
+
+        def gradient_descent_step(X, y, theta, learning_rate, reg_type, alpha):
+            m = len(y)
+            predictions = X.dot(theta)
+            errors = predictions - y
+            grad = (1/m) * X.T.dot(errors)
+
+            if reg_type == "None":
+                reg_grad = np.zeros(theta.shape)
+            elif reg_type == "L1 (Lasso)":
+                reg_grad = np.concatenate(([0], alpha * np.sign(theta[1:]) / m))
+            elif reg_type == "L2 (Ridge)":
+                reg_grad = np.concatenate(([0], (alpha/m) * theta[1:]))
+            else:  # Elastic Net
+                l1_ratio = 0.5
+                l1_grad = np.sign(theta[1:])
+                l2_grad = theta[1:]
+                reg_grad_tail = alpha / m * (l1_ratio * l1_grad + (1 - l1_ratio) * l2_grad)
+                reg_grad = np.concatenate(([0], reg_grad_tail))
+
+            grad += reg_grad
+            theta_new = theta - learning_rate * grad
+            return theta_new, grad
+
+        for i in range(1, int(iterations)+1):
+            cost = compute_cost(X, y, theta, reg_type, alpha)
+            st.write(f"Iteration {i}: Cost = {cost:.6f}")
+            st.write(f"Current parameters: {theta}")
+            theta, grad = gradient_descent_step(X, y, theta, learning_rate, reg_type, alpha)
+            st.write(f"Gradient: {grad}")
+            st.write(f"Updated parameters: {theta}")
+            st.write("We update parameters in the direction opposite to the gradient to minimize the cost function.\n")
+
+        st.write("Gradient descent complete.")
+        st.write(f"Final parameters: {theta}")
