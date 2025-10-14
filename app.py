@@ -24,7 +24,6 @@ else:
     st.success("Uploaded CSV loaded successfully.")
 
 if 'data_original' in locals():
-    # Always work with a fresh copy of original data to reset changes
     data = data_original.copy()
 
     st.header("Initial Data Preview and Quality Checks")
@@ -93,8 +92,6 @@ if 'data_original' in locals():
 
         def analyze_column(col):
             st.subheader(f"Analysis for {col}")
-
-            # We'll apply transformations and outlier treatment on a working copy column
             col_data = data[col].copy()
 
             orig_skew = skew(col_data.dropna())
@@ -149,7 +146,6 @@ if 'data_original' in locals():
             else:
                 st.write("No transformation applied.")
 
-            # Update data[col] with current version after treatment and transformation
             data[col] = col_data
 
             final_skew = skew(col_data.dropna())
@@ -178,5 +174,40 @@ if 'data_original' in locals():
         else:
             st.info("Not enough numeric columns to show correlation matrix.")
 
-        st.header("Summary")
-        st.write("Final feature and target statistics and plots are ready to be used for linear regression analysis.")
+        st.header("Choose Linear Regression Cost Function")
+
+        cost_function = st.selectbox(
+            "Select your preferred cost function:",
+            ("Mean Squared Error (MSE)", "Mean Absolute Error (MAE)", "Huber Loss")
+        )
+        
+        if cost_function == "Mean Squared Error (MSE)":
+            st.markdown("""
+            **Pros:**
+            - Differentiable everywhere, easy optimization using gradient descent.
+            - Penalizes larger errors more strongly, promoting smaller overall error variance.
+            
+            **Cons:**
+            - Sensitive to outliers, which can skew the model fit.
+            """)
+        
+        elif cost_function == "Mean Absolute Error (MAE)":
+            st.markdown("""
+            **Pros:**
+            - More robust to outliers than MSE.
+            - Simple interpretation as average absolute deviation.
+            
+            **Cons:**
+            - Not differentiable at zero, which can complicate gradient-based optimization.
+            """)
+        
+        else:  # Huber Loss
+            st.markdown("""
+            **Pros:**
+            - Combines advantages of MSE and MAE.
+            - Quadratic for small errors, linear for large errors (robust to outliers).
+            
+            **Cons:**
+            - Requires tuning a hyperparameter (delta) to define the threshold between quadratic and linear behavior.
+            """)
+
